@@ -1,0 +1,39 @@
+{
+  "name": "ecommerce_backend",
+  "version": "1.0.0",
+  "main": "server.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon server.ts",
+    "migrate": "knex migrate:latest",
+    "seed": "knex seed:run",
+    "seed:make": "knex seed:make",
+    "migrate:make": "knex migrate:make -x ts",
+    "migrate:rollback": "knex migrate:rollback"
+  },
+  "keywords": [
+    "ECommerce",
+    "PostgreSQL",
+    "Docker"
+  ],
+  "author": "Kelechi Orunta",
+  "license": "ISC",
+  "description": "Backend server for the ECommerce product website built with PostgreSQL in docker cli runtime",
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.3",
+    "@types/pg": "^8.20.0",
+    "nodemon": "^3.1.14",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@cloudinary/url-gen": "^1.22.0",
+    "cloudinary": "^2.10.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "knex": "^3.2.10",
+    "pg": "^8.21.0",
+    "redis": "^6.0.0",
+    "ts-node": "^10.9.2"
+  }
+}

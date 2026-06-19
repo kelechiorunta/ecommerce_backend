@@ -1,6 +1,8 @@
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import db from '../db/db';
+import redisClient from '../configs/redis/redis';
+import passport from 'passport';
 
 export type CustomerType = {
   username?: string;
@@ -8,7 +10,7 @@ export type CustomerType = {
   email?: string;
 };
 
-export const signup = async (req: Request, res: Response) => {
+export const signup = async (req: any, res: Response) => {
   const { username, email, password } = req.body;
 
   try {
@@ -20,8 +22,23 @@ export const signup = async (req: Request, res: Response) => {
     const customers = await db('customer')
       .insert({ username: username, password: hashedPassword, email: email })
       .returning('*');
+    const cachedKey = `customer:${email}`;
 
-    return res.status(201).json({ data: customers, message: 'Customer saved successfully' });
+    const newCustomer = { _id: customers[0].customer_id, username: username, email: email };
+    await redisClient.setEx(cachedKey, 60 * 60, JSON.stringify(newCustomer));
+
+    req.login(newCustomer, async (err: any) => {
+      if (err) {
+        return res.status(500).json({
+          error: err instanceof Error ? err.message : err || 'Auto-login failed after signup'
+        });
+      }
+
+      req.session.user = newCustomer;
+      req.session.authenticated = true;
+
+      return res.status(201).json({ data: newCustomer, message: 'Customer saved successfully' });
+    });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : err });
   }
@@ -49,5 +66,62 @@ export const signin = async (req: Request, res: Response) => {
     return res.status(200).json({ data: customer, message: 'Customer signed in successfully' });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : err });
+  }
+};
+
+export const passportLogin = async (req: any, res: Response, next: NextFunction) => {
+  passport.authenticate(
+    'local',
+    {
+      failureRedirect: '/login',
+      failureMessage: true
+    },
+    async (err: any, user: any, info: any) => {
+      if (err || !user) {
+        return res.status(401).json({ error: info?.message || 'Unauthorized' });
+      }
+
+      req.logIn(user, async (err: any) => {
+        if (err) {
+          return res.status(500).json({ error: err || 'Login error' });
+        }
+        try {
+          // Store minimal safe user data
+          const sessionCustomer = {
+            _id: user.customer_id,
+            username: user.username,
+            email: user.email
+          };
+
+          req.session.user = sessionCustomer as any;
+          req.session.authenticated = true as boolean;
+
+          // Redis cache key
+          const cacheKey = `customer:${user.email}`;
+          const cachedUser = await redisClient.get(cacheKey);
+          if (!cachedUser) {
+            await redisClient.setEx(cacheKey, 60 * 60, JSON.stringify(sessionCustomer));
+          }
+
+          return res.status(200).json({
+            message: 'Login successful',
+            user
+          });
+        } catch (error) {
+          return res.status(500).json({
+            error: error instanceof Error ? error.message : error
+          });
+        }
+      });
+    }
+  )(req, res, next);
+};
+
+export const grantAccess = (req: Request, res: Response) => {
+  try {
+    res.json({ user: req.user });
+    // res.sendStatus(200, 'application/json', { user: req.user });
+  } catch (error) {
+    res.status(500).json({ message: 'No authenticated user!' });
   }
 };

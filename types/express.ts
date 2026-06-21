@@ -5,6 +5,6 @@ declare module 'express' {
     user?: any;
     accountId?: any;
     email?: any;
-    session?: any;
+   
   }
 }

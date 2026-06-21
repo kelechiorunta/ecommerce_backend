@@ -93,8 +93,8 @@ export const passportLogin = async (req: any, res: Response, next: NextFunction)
             email: user.email
           };
 
-          req.session.user = sessionCustomer as any;
-          req.session.authenticated = true as boolean;
+          req.session.user = sessionCustomer;
+          req.session.authenticated = true;
 
           // Redis cache key
           const cacheKey = `customer:${user.email}`;
@@ -115,6 +115,24 @@ export const passportLogin = async (req: any, res: Response, next: NextFunction)
       });
     }
   )(req, res, next);
+};
+
+export const logout = async (req: any, res: Response, next: NextFunction) => {
+  // console.log('user', req.user);
+  // console.log('session', req.session.user);
+  if (req.user) {
+    console.log('del redis key', req.user.email);
+    await redisClient.delEx(`customer:${req.user.email}`);
+  }
+  req.logout(async function (err: any) {
+    if (err) {
+      return next(err);
+    }
+    // await req.session.destroy();
+    // res.clearCookie('remember_me');
+    console.log('Logged out successfully');
+    res.redirect('/login');
+  });
 };
 
 export const grantAccess = (req: Request, res: Response) => {

@@ -1,13 +1,12 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import session from 'express-session';
+import passport from 'passport';
 import sessionStorage from './configs/redis/redisStore';
 
 import productRouter from './routes/productRoutes';
 import categoryRouter from './routes/categoryRoutes';
 import producerRouter from './routes/producerRoutes';
 import customerRouter from './routes/customerRoutes';
-import passport from 'passport';
 
 const app = express();
 

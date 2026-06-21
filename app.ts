@@ -19,9 +19,9 @@ app.use(sessionStorage);
 app.use(passport.initialize());
 app.use(passport.session());
 
+app.use('/api/customers', customerRouter);
 app.use('/api/products', productRouter);
 app.use('/api/categories', categoryRouter);
 app.use('/api/producers', producerRouter);
-app.use('/api/customers', customerRouter);
 
 export default app;

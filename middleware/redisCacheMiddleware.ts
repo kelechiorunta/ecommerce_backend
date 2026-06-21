@@ -29,7 +29,7 @@ const validateRedisSession = async (req: any, res: Response, next: NextFunction)
     // Populate request
     // req.session.user = parsedUser;
     req.user = parsedUser;
-
+    // console.log("req.user", req.user)
     next();
   } catch (error) {
     console.error(error);

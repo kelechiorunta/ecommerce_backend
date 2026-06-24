@@ -4,17 +4,29 @@
   "main": "server.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
     "start": "nodemon server.ts",
     "migrate": "knex migrate:latest",
     "seed": "knex seed:run",
     "seed:make": "knex seed:make",
     "migrate:make": "knex migrate:make -x ts",
-    "migrate:rollback": "knex migrate:rollback"
+    "migrate:rollback": "knex migrate:rollback",
+    "autostart": "pm2 start dist/server.js  --name ecommerce-backend --max-restarts 5 --restart-delay 3000",
+    "stop": "pm2 stop dist/server.js",
+    "monitor": "pm2 monitor dist/server.js",
+    "delete_ecommerce_pm2": "pm2 delete ecommerce-backend",
+    "nginx:start": "brew services start nginx",
+    "nginx:stop": "brew services stop nginx",
+    "nginx:restart": "brew services restart nginx",
+    "nginx:status": "brew services list | grep nginx"
   },
   "keywords": [
     "ECommerce",
     "PostgreSQL",
-    "Docker"
+    "Docker",
+    "Express",
+    "PM2",
+    "Knex.js"
   ],
   "author": "Kelechi Orunta",
   "license": "ISC",
@@ -42,6 +54,7 @@
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "pg": "^8.21.0",
+    "pm2": "^7.0.1",
     "redis": "^6.0.0",
     "ts-node": "^10.9.2"
   }

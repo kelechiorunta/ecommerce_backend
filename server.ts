@@ -4,7 +4,7 @@ import { createConnection } from "./db/db";
 
 const server = createServer(app);
 
-createConnection()
+createConnection();
 
 server.listen(3980, () => {console.log('Server is listening on PORT 3980')})
 

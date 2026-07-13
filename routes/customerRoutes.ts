@@ -2,6 +2,7 @@ import { Router } from 'express';
 import passport from 'passport';
 
 import {
+  editCustomer,
   grantAccess,
   logout,
   passportLogin,
@@ -22,6 +23,7 @@ passportLocalStrategy(passport);
 customerRouter.post('/signup', signup);
 customerRouter.post('/signin', passportLogin);
 customerRouter.get('/logout', logout);
+customerRouter.put('/:_id', editCustomer);
 customerRouter.get('/isAuthenticated', validateRedisSession, grantAccess);
 
 export default customerRouter;

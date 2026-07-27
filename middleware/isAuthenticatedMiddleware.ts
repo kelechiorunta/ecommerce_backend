@@ -10,7 +10,7 @@ export const checkAuthenticate = (req: Request, res: Response, next: NextFunctio
     if (!req.isAuthenticated() || !req.user) {
       console.log('FAILED MIDDLEWARE AUTHENTICATION');
       // This is the login route in the frontend
-      return res.redirect('/login');
+      return res.redirect('http://localhost:5174/login');
     }
     next();
   } catch (error) {

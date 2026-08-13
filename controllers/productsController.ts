@@ -37,6 +37,74 @@ const fetchAllProducts = async (_req: Request, res: Response) => {
   }
 };
 
+const createProduct = async (req: Request, res: Response) => {
+  try {
+    const { name, description, price, rating, category_id, producer_id, image_url } = req.body;
+
+    if (!name || !description || !price || !rating || !category_id || !producer_id || !image_url) {
+      return res
+        .status(401)
+        .json({ error: 'Product fields are incomplete. Failed to create product.' });
+      // throw Error('Product fields are incomplete');
+    }
+    db.transaction(async (trx) => {
+      const [history] = await trx('product_history')
+        .insert({
+          category_id,
+          producer_id,
+          status: 'PENDING',
+          report: 'New Product Creation History in Progress'
+        })
+        .returning('*');
+
+      try {
+        await trx.transaction(async (sp) => {
+          const [product] = await sp('products')
+            .insert({
+              name: name,
+              description: description,
+              price: price,
+              rating: rating,
+              category_id: category_id,
+              producer_id: producer_id,
+              image_url: image_url
+            })
+            .returning('*');
+
+          // At this stage, the customer's update timeline has moved to an update of the edit_history table
+          await sp('product_history')
+            .where({ product_history_id: history.product_history_id })
+            .update({
+              producer_id,
+              category_id,
+              status: 'SUCCESS',
+              report: `New Product, ${product.name} has just been added successfully to database.`
+            });
+
+          if (product) {
+            return res
+              .status(201)
+              .json({ message: 'Product successfully added to database', product });
+          }
+        });
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : error);
+        await trx('product_history')
+          .where({ product_history_id: history.product_history_id })
+          .update({
+            producer_id,
+            category_id,
+            status: 'FAILED',
+            report: `New Product, ${name} could not be added successfully to database.
+                    Error Message: ${error instanceof Error ? error.message : error}`
+          });
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : error });
+  }
+};
+
 const uploadImagesFromCloudinary = async (_req: Request, res: Response) => {
   try {
     const cachedImagesKey = 'images';
@@ -91,4 +159,4 @@ const uploadImagesFromCloudinary = async (_req: Request, res: Response) => {
   }
 };
 
-export { fetchAllProducts, uploadImagesFromCloudinary };
+export { fetchAllProducts, uploadImagesFromCloudinary, createProduct };

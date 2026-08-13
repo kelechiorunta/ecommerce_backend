@@ -31,7 +31,7 @@ export const signup = async (req: any, res: Response) => {
           report: 'Signup in progress'
         })
         .returning('*');
-      
+
       try {
         await trx.transaction(async (sp) => {
           // First Create Customer (1st Timeline/SavePoint)
@@ -122,12 +122,19 @@ export const passportLogin = async (req: any, res: Response, next: NextFunction)
     },
     async (err: any, user: any, info: any) => {
       if (err || !user) {
-        return res.status(401).json({ error: info?.message || 'Unauthorized' });
+        return res.status(401).json({
+          error:
+            err instanceof Error
+              ? (err.message ?? err.cause ?? err.name)
+              : info?.message || 'Unauthorized'
+        });
       }
 
       req.logIn(user, async (err: any) => {
         if (err) {
-          return res.status(500).json({ error: err || 'Login error' });
+          return res
+            .status(500)
+            .json({ error: err instanceof Error ? err.message : err || 'Login error' });
         }
         try {
           // Store minimal safe user data
@@ -269,6 +276,163 @@ export const editCustomer = async (req: any, res: any) => {
         res.status(400).json({
           error:
             'Failed command. SavePoint failed at history update. Implemented Rollback to user update only.'
+        });
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : error });
+  }
+};
+
+export const fetchUserDetails = async (req: any, res: any) => {
+  try {
+    const id = req.params.id;
+
+    await db.transaction(async (trx) => {
+      // Create auth_history of fetching user's order details (2nd timeline/savePoint)
+      const [history] = await trx('auth_history')
+        .insert({
+          status: 'PENDING',
+          report: `Authorized Fetching of Order Details for Customer with id: ${id} in progress`
+        })
+        .returning('*');
+
+      try {
+        await trx.transaction(async (sp) => {
+          // Confirm customer
+          const customer = await sp('customer').where({ customer_id: id }).first();
+          if (!customer) {
+            return res.status(404).json({ error: 'Customer does not exist' });
+          }
+
+          // Proceed to join tables based on valid customer's id
+          const details = await sp
+            .select(
+              'customer.username AS name',
+              'details_history.customer_id AS userId',
+              'details_history.details_history_id AS id',
+              'details_history.email AS email',
+              'details_history.status AS status',
+              'details_history.report AS report'
+            )
+            .from('details_history')
+            .where('details_history.customer_id', customer.customer_id)
+            .join('customer', 'details_history.customer_id', '=', 'customer.customer_id');
+          // Close the Pending Transaction
+          await sp('auth_history')
+            .where({ auth_history_id: history.auth_history_id })
+            .update({
+              customer_id: customer.customer_id,
+              status: 'SUCCESS',
+              report: `Order details for ${customer.username} has been successfully fetched.`
+            });
+
+          console.table(details);
+          res.status(200).json(details);
+        });
+      } catch (error) {
+        await trx('auth_history')
+          .where({ auth_history_id: history.auth_history_id })
+          .update({
+            status: 'FAILED',
+            report: `There was a failed attempt to fetch the order details of customer with id: ${id}. ${error instanceof Error ? error.message : error}`
+          });
+        res.status(400).json({ error: error instanceof Error ? error.message : error });
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : error });
+  }
+};
+
+export const createDeliveryDetails = async (req: any, res: any) => {
+  try {
+    const { id, fullName, email, firstAddress, secondAddress, city, postalCode, country } =
+      req.body;
+
+    if (!id) {
+      return res.status(401).json({ error: 'Missing authenticated customer id. Unauthorized' });
+    }
+
+    if (
+      !fullName ||
+      !email ||
+      !firstAddress ||
+      !secondAddress ||
+      !city ||
+      !postalCode ||
+      !country
+    ) {
+      return res.status(400).json({ error: 'Incomplete details credentials. Incomplete payload.' });
+    }
+
+    const customer = await db('customer').where({ customer_id: id }).first();
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer does not exist' });
+    }
+    if (customer.email !== email) {
+      return res
+        .status(403)
+        .json({ error: 'Email address must belong to customer. Not Permitted to use email' });
+    }
+
+    await db.transaction(async (trx) => {
+      const [detail_history] = await trx('details_history')
+        .insert({
+          customer_id: id,
+          email: email,
+          status: 'PENDING',
+          report: 'Detail History Update in Progress'
+        })
+        .returning('*');
+
+      try {
+        await trx.transaction(async (sp) => {
+          const [delivery_details] = await sp('customer_delivery_details')
+            .insert({
+              full_name: fullName,
+              email,
+              first_address: firstAddress,
+              second_address: secondAddress,
+              city,
+              postal_code: postalCode,
+              country
+            })
+            .returning('*');
+
+          if (!delivery_details) {
+            return res.status(403).json({ error: 'No delivery details allowed to save.' });
+          }
+
+          // Close the Pending Transaction
+          await sp('details_history')
+            .where({ details_history_id: detail_history.details_history_id })
+            .update({
+              customer_id: customer.customer_id,
+              status: 'SUCCESS',
+              report: `${delivery_details.full_name} has sent details of delivery successfully using valid email ${delivery_details.email}`
+            });
+
+          return res.status(201).json({
+            message: 'Details delivery saved successfully',
+            details: delivery_details
+          });
+        });
+      } catch (error) {
+        // Close the Pending Transaction
+        const cause = error instanceof Error ? error.cause : error;
+        await trx('details_history')
+          .where({ details_history_id: detail_history.details_history_id })
+          .update({
+            customer_id: customer.customer_id,
+            status: 'FAILED',
+            report: `${fullName} failed to send details of delivery successfully due to ${cause}.`
+          });
+        res.status(400).json({
+          error:
+            error instanceof Error
+              ? `Transaction SavePoint Command failed at detail_history creation. Error: ${error.message}`
+              : error
         });
       }
     });

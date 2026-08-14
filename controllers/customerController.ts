@@ -189,7 +189,11 @@ export const logout = async (req: any, res: Response, next: NextFunction) => {
   }
   req.logout(async function (err: any) {
     if (err) {
-      return next(err);
+      if (process.env.NODE_ENV === 'development') {
+        res.redirect('/login');
+        return next(err);
+      }
+      res.redirect('/login');
     }
     // await req.session.destroy();
     // res.clearCookie('remember_me');
@@ -287,6 +291,10 @@ export const editCustomer = async (req: any, res: any) => {
 export const fetchUserDetails = async (req: any, res: any) => {
   try {
     const id = req.params.id;
+    const limit = req.query.limit ?? 9;
+    const cursor = req.query.cursor ?? undefined;
+
+    console.table({ id, limit, cursor });
 
     await db.transaction(async (trx) => {
       // Create auth_history of fetching user's order details (2nd timeline/savePoint)
@@ -306,7 +314,24 @@ export const fetchUserDetails = async (req: any, res: any) => {
           }
 
           // Proceed to join tables based on valid customer's id
-          const details = await sp
+          // Without cursor
+
+          // const details_rows = sp
+          //   .select(
+          //     'customer.username AS name',
+          //     'details_history.customer_id AS userId',
+          //     'details_history.details_history_id AS id',
+          //     'details_history.email AS email',
+          //     'details_history.status AS status',
+          //     'details_history.report AS report'
+          //   )
+          //   .from('details_history')
+          //   .where('details_history.customer_id', customer.customer_id)
+          //   .join('customer', 'details_history.customer_id', '=', 'customer.customer_id')
+          //   .orderBy('details_history.details_history_id', 'asc')
+          //   .limit(10);
+
+          const details_rows = sp
             .select(
               'customer.username AS name',
               'details_history.customer_id AS userId',
@@ -316,8 +341,26 @@ export const fetchUserDetails = async (req: any, res: any) => {
               'details_history.report AS report'
             )
             .from('details_history')
+            .join('customer', 'details_history.customer_id', '=', 'customer.customer_id')
             .where('details_history.customer_id', customer.customer_id)
-            .join('customer', 'details_history.customer_id', '=', 'customer.customer_id');
+            .orderBy('details_history.details_history_id', 'asc')
+            .limit(limit + 1);
+
+          // With cursor
+          if (cursor !== 'undefined' || !isNaN(cursor)) {
+            details_rows
+              .where('details_history.details_history_id', '>', cursor)
+              .orderBy('details_history.created_at', 'asc')
+              .orderBy('details_history.details_history_id', 'asc');
+          }
+
+          const details = await details_rows;
+
+          const data = details.slice(0, limit);
+          const hasNextPage = details.length > limit;
+          const nextCursor = hasNextPage ? data[data.length - 1].id : null;
+          const dataCount = details.length;
+
           // Close the Pending Transaction
           await sp('auth_history')
             .where({ auth_history_id: history.auth_history_id })
@@ -328,7 +371,7 @@ export const fetchUserDetails = async (req: any, res: any) => {
             });
 
           console.table(details);
-          res.status(200).json(details);
+          res.status(200).json({ paginatedData: data, hasNextPage, nextCursor, dataCount });
         });
       } catch (error) {
         await trx('auth_history')
